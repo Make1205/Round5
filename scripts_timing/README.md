@@ -18,7 +18,7 @@ The script benchmarks `R5N1_1CCA_0d`, `R5N1_3CCA_0d`, and `R5N1_5CCA_0d` with:
 * the `reference` implementation, measured as end-to-end wall-clock time because the reference `sample_kem` does not include the internal `TIMING` cycle timer;
 * the `optimized` implementation, built with `TIMING=N`, which reports key generation, encapsulation, decapsulation, and total means in milliseconds and K CPU cycles.
 
-By default the script builds with `STANDALONE=1` so it uses the in-tree TupleHash/FIPS202 code instead of requiring an external `libkeccak`. On CPUs that advertise AVX2, the script runs both optimized scalar and optimized AVX2 builds. Use `--avx2 off`, `--avx2 on`, or `--avx2 both` to override this behavior.
+By default the script builds with `STANDALONE=1` so it uses the in-tree TupleHash/FIPS202 code instead of requiring an external `libkeccak`. It also forces `TAU=0`/`-t 0` for these R5N1 runs, which avoids the fixed-A `createAfixed` path. On CPUs that advertise AVX2, the script runs both optimized scalar and optimized AVX2 builds. Use `--avx2 off`, `--avx2 on`, or `--avx2 both` to override this behavior. The script uses standard `grep`, not `rg`, so ripgrep is not required on the target machine.
 
 Useful examples:
 

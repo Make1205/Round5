@@ -37,6 +37,8 @@ Options:
 
 Notes:
   * Builds use STANDALONE=1 so no external libkeccak installation is required.
+  * Builds and runs use TAU=0/-t 0, which avoids the fixed-A createAfixed path
+    and is the intended default for these R5N1 benchmark runs.
   * Reference sample_kem has no internal cycle timer; this script measures its
     end-to-end wall-clock runtime and verifies "Comparing shared secrets: OK".
   * Optimized sample_kem is built with TIMING=N and prints keygen/enc/dec means
@@ -106,7 +108,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"; if [ "$KEEP_BUILDS" -eq 0 ]; then make -s -C "$REPO_ROOT/reference" clean >/dev/null 2>&1 || true; make -s -C "$REPO_ROOT/optimized" clean >/dev/null 2>&1 || true; fi' EXIT
 
 have_avx2=0
-if [ -r /proc/cpuinfo ] && rg -qi '\bavx2\b' /proc/cpuinfo; then
+if [ -r /proc/cpuinfo ] && grep -Eiq '(^|[[:space:]])avx2([[:space:]]|$)' /proc/cpuinfo; then
     have_avx2=1
 fi
 
@@ -165,7 +167,7 @@ values = []
 last_stdout = ""
 for _ in range(runs):
     start = time.perf_counter()
-    proc = subprocess.run([exe, "-a", scheme], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    proc = subprocess.run([exe, "-a", scheme, "-t", "0"], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     elapsed_ms = (time.perf_counter() - start) * 1000.0
     last_stdout = proc.stdout
     if proc.returncode != 0:
@@ -189,12 +191,12 @@ PY
 }
 
 extract_timing_lines() {
-    rg '^(CRYPTO_ALGNAME|Success|Failures|KeyGen|Enc   |Dec   |Total)' || true
+    grep -E '^(CRYPTO_ALGNAME|Success|Failures|KeyGen|Enc   |Dec   |Total)' || true
 }
 
 check_avx2_object() {
     local object="$REPO_ROOT/optimized/build/.o/matmul_avx2.o"
-    if [ -f "$object" ] && nm "$object" 2>/dev/null | rg -q ' T matmul_as_q| T inner1'; then
+    if [ -f "$object" ] && nm "$object" 2>/dev/null | grep -Eq ' T matmul_as_q| T inner1'; then
         echo "yes"
     else
         echo "no"
@@ -208,13 +210,14 @@ log "Date: $(date -Is)"
 log "Schemes: $SCHEMES"
 log "Optimized TIMING repetitions: $TIMING_REPS"
 log "Reference wall-clock runs: $REF_RUNS"
+log "TAU: 0"
 log "CPU AVX2 advertised: $([ "$have_avx2" -eq 1 ] && echo yes || echo no)"
 log "Optimized variants: $OPT_VARIANTS"
 log ""
 
 log "== Building reference implementation (STANDALONE=1) =="
 run_logged make -s -C "$REPO_ROOT/reference" clean
-run_logged make -s -C "$REPO_ROOT/reference" STANDALONE=1
+run_logged make -s -C "$REPO_ROOT/reference" STANDALONE=1 TAU=0
 log ""
 
 log "== Reference wall-clock results =="
@@ -228,7 +231,7 @@ for variant in $OPT_VARIANTS; do
     for scheme in $SCHEMES; do
         log "-- $scheme / optimized-$variant --"
         run_logged make -s -C "$REPO_ROOT/optimized" clean
-        make_args=(-s -C "$REPO_ROOT/optimized" STANDALONE=1 "ALG=$scheme" "TIMING=$TIMING_REPS")
+        make_args=(-s -C "$REPO_ROOT/optimized" STANDALONE=1 TAU=0 "ALG=$scheme" "TIMING=$TIMING_REPS")
         if [ "$variant" = "avx2" ]; then
             make_args+=(AVX2=1)
         fi
@@ -236,7 +239,7 @@ for variant in $OPT_VARIANTS; do
         used_avx2="$(check_avx2_object)"
         log "optimized-$variant AVX2 matmul object active: $used_avx2"
         "$REPO_ROOT/optimized/build/sample_kem" > "$TMP_DIR/optimized_${variant}_${scheme}.out"
-        if ! rg -q "Success in all $TIMING_REPS KEM executions" "$TMP_DIR/optimized_${variant}_${scheme}.out"; then
+        if ! grep -q "Success in all $TIMING_REPS KEM executions" "$TMP_DIR/optimized_${variant}_${scheme}.out"; then
             cat "$TMP_DIR/optimized_${variant}_${scheme}.out" | tee -a "$OUT_FILE"
             echo "optimized run failed or did not report success for $scheme / $variant" >&2
             exit 1
