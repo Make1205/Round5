@@ -4,7 +4,11 @@
 #include <string.h>
 #include <inttypes.h>
 
+#ifdef BENCH_USE_API_H
+#include "api.h"
+#else
 #include "kem.h"
+#endif
 
 #ifndef ITERATIONS
 #define ITERATIONS 1000
@@ -47,7 +51,7 @@ static double mean_u64(const uint64_t *arr, size_t n) {
     return (double)(sum / (long double)n);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     printf("cycle_counter=%s\n", CYCLE_COUNTER_NAME);
     printf("iterations=%d\n", ITERATIONS);
     printf("pk_bytes=%d\n", CRYPTO_PUBLICKEYBYTES);
@@ -62,6 +66,21 @@ int main(void) {
     unsigned char pk[CRYPTO_PUBLICKEYBYTES], sk[CRYPTO_SECRETKEYBYTES];
     unsigned char ct[CRYPTO_CIPHERTEXTBYTES], ss1[CRYPTO_BYTES], ss2[CRYPTO_BYTES];
     uint64_t keypair_cycles[ITERATIONS], enc_cycles[ITERATIONS], dec_cycles[ITERATIONS];
+
+    if (argc > 1 && strcmp(argv[1], "--verify") == 0) {
+        if (crypto_kem_keypair(pk, sk) != 0 ||
+            crypto_kem_enc(ct, ss1, pk) != 0 ||
+            crypto_kem_dec(ss2, ct, sk) != 0) {
+            printf("correctness=failed\nstatus=run_failed\n");
+            return 3;
+        }
+        if (memcmp(ss1, ss2, CRYPTO_BYTES) != 0) {
+            printf("correctness=failed\nstatus=correctness_failed\n");
+            return 4;
+        }
+        printf("correctness=ok\nstatus=ok\n");
+        return 0;
+    }
 
     for (int i = 0; i < WARMUP; i++) {
         if (crypto_kem_keypair(pk, sk) != 0) { printf("status=run_failed\n"); return 3; }
